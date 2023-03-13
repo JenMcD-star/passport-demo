@@ -6,21 +6,26 @@ const LocalStrategy = require("passport-local").Strategy;
 const mongoDb = process.env.MONGO_URI;
 const User = require('./model/user')
 const connectDB = require('./db/connect')
+const bcrypt = require('bcryptjs')
 const app = express();
 
 passport.use(
   new LocalStrategy((username, password, done) => {
     User.findOne({ username: username }, (err, user) => {
-      if (err) { 
+      if (err) {
         return done(err);
       }
       if (!user) {
         return done(null, false, { message: "Incorrect username" });
       }
-      if (user.password !== password) {
-        return done(null, false, { message: "Incorrect password" });
-      }
-      return done(null, user);
+      bcrypt.compare(password, user.password, (err, result) => {
+        if (result) {
+          return done(null, user);
+        } else {
+          return done(null, false, { message: "Incorrect password" });
+        }
+      });
+      // return done(null, user);
     });
   })
 );
@@ -59,18 +64,14 @@ app.get("/sign-up", function(req, res) {
 });
 
 
-app.post("/sign-up", (req, res, next) => {
-  const user = new User({
-    username: req.body.username,
-    password: req.body.password
-  }).save(err => {
-    if (err) { 
-      console.log(err)
-      return next(err);
-    }
+app.post("/sign-up", async (req, res, next) => {
+  try {
+    const hashedPassword = await bcrypt.hash(req.body.password, 10);
+    await User.create({ username: req.body.username, password: hashedPassword });
     res.redirect("/");
-    console.log(req.body)
-  });
+  } catch (err) {
+    return next(err);
+  }
 });
 
 //log in
